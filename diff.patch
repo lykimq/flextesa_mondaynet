@@ -1,0 +1,73 @@
+diff --git a/.dockerignore b/.dockerignore
+index d7fa787..9eb50bf 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -2,3 +2,4 @@
+ /flextesa
+ /_opam
+ /_build
++artifacts.zip
+\ No newline at end of file
+diff --git a/Dockerfile b/Dockerfile
+index 393317e..0117df5 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,13 +1,16 @@
+ FROM ocaml/opam:alpine-3.15-ocaml-4.12 as build_step
+ #ENV DEBIAN_FRONTEND=noninteractive
+ RUN sudo cp /usr/bin/opam-2.1 /usr/bin/opam
++ADD octez-binaries/x86_64/* /usr/bin/
+ RUN sudo apk update
+-ADD  --chown=opam:opam . ./
++ADD --chown=opam:opam tezai-tz1-crypto.opam flextesa-cli.opam flextesa.opam ./
+ RUN opam pin add -n tezai-base58-digest https://gitlab.com/oxheadalpha/tezai-base58-digest.git
+ RUN opam install --with-test --deps-only ./tezai-tz1-crypto.opam ./flextesa.opam
++ADD --chown=opam:opam dune-project ./
++ADD --chown=opam:opam src ./src
+ RUN opam exec -- dune build --profile=release src/app/main.exe
+ RUN sudo cp _build/default/src/app/main.exe /usr/bin/flextesa
+-RUN sudo sh src/scripts/get-octez-static-binaries.sh /usr/bin/
++#RUN sudo sh src/scripts/get-octez-static-binaries.sh /usr/bin/
+ #WORKDIR /usr/bin
+ RUN sudo sh src/scripts/get-zcash-params.sh /usr/share/zcash-params
+ FROM alpine:3.15 as run_image
+@@ -23,12 +26,14 @@ COPY --from=0 /usr/bin/octez-baker-PtKathma .
+ COPY --from=0 /usr/bin/octez-baker-alpha .
+ COPY --from=0 /usr/bin/octez-client .
+ COPY --from=0 /usr/bin/octez-codec .
+-COPY --from=0 /usr/bin/octez-embedded-protocol-packer .
++#COPY --from=0 /usr/bin/octez-embedded-protocol-packer .
++COPY --from=0 /usr/bin/octez-sc-rollup-client-alpha .
++COPY --from=0 /usr/bin/octez-sc-rollup-node-alpha .
+ #COPY --from=0 /usr/bin/octez-init-sandboxed-client.sh .
+ COPY --from=0 /usr/bin/octez-node .
+ #COPY --from=0 /usr/bin/octez-sandboxed-node.sh .
+ #COPY --from=0 /usr/bin/octez-signer .
+-COPY --from=0 /usr/bin/octez-validator .
++#COPY --from=0 /usr/bin/octez-validator .
+ COPY --from=0 /usr/bin/flextesa .
+ COPY --from=0 /usr/share/zcash-params/* /usr/share/zcash-params/
+ COPY --from=0 /usr/bin/octez-tx-rollup-client-PtKathma .
+diff --git a/src/lib/tezos_protocol.ml b/src/lib/tezos_protocol.ml
+index e4ce6a5..efe2e89 100644
+--- a/src/lib/tezos_protocol.ml
++++ b/src/lib/tezos_protocol.ml
+@@ -292,7 +292,7 @@ let protocol_parameters_json t : Ezjsonm.t =
+               ("tx_rollup_max_ticket_payload_size", int 10_240);
+               ("tx_rollup_rejection_max_proof_size", int 30_000);
+               ("tx_rollup_sunset_level", int32 3_473_409l);
+-              ("sc_rollup_enable", bool false);
++              ("sc_rollup_enable", bool true);
+               ("sc_rollup_origination_size", int 6_314);
+               ("sc_rollup_challenge_window_in_blocks", int 20_160);
+             ]
+@@ -311,8 +311,8 @@ let protocol_parameters_json t : Ezjsonm.t =
+               ("feature_enable", bool false);
+               ("number_of_slots", int 16);
+               ("number_of_shards", int 256);
+-              ("endorsement_lag", int 1);
+               ("availability_threshold", int 50);
++              ("attestation_lag", int 1);
+             ]
+           in
+           match t.kind with
